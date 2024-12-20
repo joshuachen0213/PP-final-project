@@ -3,9 +3,10 @@
 #include <iostream>
 #include <chrono>
 #include <hip/hip_runtime.h>
+#include <hipblas.h>
 #include "matrix.hpp"
-#define BLOCKSIZE 32
 
+#define BLOCKSIZE 32
 #define HIP_CHECK(expression)                                            \
 	{                                                                    \
 		const hipError_t status = expression;                            \
@@ -52,7 +53,22 @@ int main(int argc, char *argv[]) {
 	HIP_CHECK(hipMalloc(&uinit_dev, n * sizeof(double)));
 	HIP_CHECK(hipMemcpyAsync(uinit_dev, uinit, n * sizeof(double), hipMemcpyHostToDevice));
 	HIP_CHECK(hipMalloc(&result_dev, n * (step + 1) * sizeof(double)));
-	solve<<<1, 1024, sizeof(double) * n * 2, 0>>>(n, step, uinit_dev, result_dev, C);
+    
+    double alpha = 1.0, beta = 0.0;
+    hipblasHandle_t handle;
+    hipblasCreate(&handle);
+    double *y_dev;
+    HIP_CHECK(hipMalloc(&y_dev, n * sizeof(double)));
+    HIP_CHECK(hipMemcpyAsync(y_dev, uinit, n * sizeof(double), hipMemcpyHostToDevice));
+    HIP_CHECK(hipMemcpyAsync(result_dev, uinit, n * sizeof(double), hipMemcpyHostToDevice));
+    for(int i = 1; i <= step; i++) {
+        hipblasDgemv(handle, HIPBLAS_OP_N, n, n,
+                                   &alpha, C, n, result_dev + (i - 1) * n, 1, &beta, y_dev, 1);
+        HIP_CHECK(hipMemcpyAsync(result_dev + i * n, y_dev, n * sizeof(double), hipMemcpyHostToDevice));
+        HIP_CHECK(hipMemsetAsync(y_dev, 0, n * sizeof(double)));
+    }
+    hipblasDestroy(handle);
+    HIP_CHECK(hipDeviceSynchronize());
     HIP_CHECK(hipGetLastError());
 
 	// allocate memory for host result and write output
@@ -110,6 +126,10 @@ __global__ void init_C(int n, double *C, double *M_inv, double cst) {
 	for (int i = idx; i < n * n; i += stride) {
 		C[i] *= cst;
 	}
+    __syncthreads();
+    for (int i = idx; i < n; i += stride) {
+        C[i * n + i] += 1.0;
+    }
 }
 
 void M_inverse(int n, double **M_inv) {
@@ -127,30 +147,6 @@ void M_inverse(int n, double **M_inv) {
 	}
 	inverse_matrix(n, M, M_inv);
 	delete[] M;
-}
-__global__ void solve(
-	int n, int step, double *uinit, double *result, double *C) {
-	int idx = threadIdx.x;
-	int stride = blockDim.x;
-    extern __shared__ double sresult[];
-	for (int i = idx; i < n; i += stride) {
-		result[i] = sresult[i] = uinit[i];
-	}
-	__syncthreads();
-    int odd = 0;
-    double sum = 0;
-	for (int i = 1; i <= step; i++) {
-		for (int j = idx; j < n; j += stride) {
-            sum = sresult[odd * n + j];
-			for (int k = 0; k < n; k++) {
-                sum += C[j * n + k] * sresult[odd * n + k];
-			}
-            result[i * n + j] = sum;
-            sresult[(1 - odd) * n + j] = sum;
-		}
-		__syncthreads();
-        odd = 1 - odd;
-	}
 }
 
 void write_output(const char *filename, double *result) {

@@ -28,4 +28,4 @@ for i in range((step1 + 1) * n1):
         sys.stderr.write(f"number1 = {float(result1[i])}, number2 = {float(result2[i])}\n")
         sys.exit(1)
 
-sys.stderr.write("Accepted\n")
+sys.stdout.write("Accepted\n")

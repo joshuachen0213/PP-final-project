@@ -21,22 +21,66 @@ def run_program(command):
 
 
 if __name__ == "__main__":
-    # Replace 'your_program' and arguments with the program you want to run
     testcases = [
-        "normal1000",
-        "normal100",
-        "normal50",
-        "quad100",
-        "quad50",
+        "q50",
+        "q100",
+        "q200",
+        "q400",
+        "q1000",
+        "n50",
+        "n100",
+        "n200",
+        "n400",
+        "n1000",
+        "nn50",
+        "nn100",
+        "nn200",
+        "nn400",
+        "nn1000",
+        "c50",
+        "c100",
+        "c200",
+        "c400",
+        "c1000",
     ]
-    tempdir = "profiling/"
+    seqdir = "seqout/"
+    paradir = "paraout/"
     testdir = "testcases/"
     for testcase in testcases:
-        command = ["sbatch", "--version"]
-        output, return_code, execution_time = run_program(command)
+        command = [
+            "srun",
+            "-p",
+            "mi2104x",
+            "-t",
+            "00:10:00",
+            "./para",
+            f"{testdir}{testcase}.in",
+            f"{paradir}{testcase}.out",
+        ]
+        _, _, execution_time_para = run_program(command)
+        command = [
+            "srun",
+            "-p",
+            "mi2104x",
+            "-t",
+            "00:10:00",
+            "./seq",
+            f"{testdir}{testcase}.in",
+            f"{seqdir}{testcase}.out",
+        ]
+        _, _, execution_time_seq = run_program(command)
+        command = [
+            "python",
+            "validate.py",
+            f"{seqdir}{testcase}.out",
+            f"{paradir}{testcase}.out",
+        ]
+        output, _, _ = run_program(command)
         output = output.split()[0]
+        print(f"\nTestcase {testcase}:")
+        print(f"    Parallel version execution time: {execution_time_para:.4f} seconds")
+        print(f"    Sequential version execution time: {execution_time_seq:.4f} seconds")
         if output == "Accepted":
-            print("\033[1;32;40mAccepted\033[0m 1;32;40m")
-        print(f"Output:\n{output}")
-        print(f"Return Code: {return_code}")
-        print(f"Execution Time: {execution_time:.4f} seconds")
+            print(f"    \033[92mAccepted\033[0m")
+        else:
+            print(f"    \033[93mWrong Answer\033[0m")

@@ -1,7 +1,7 @@
 CXX := g++
 HIPXX := hipcc
 CXXFLAGS := -std=c++17 -O3
-HIPFLAGS := $(CXXFLAGS)
+HIPFLAGS := $(CXXFLAGS) -I /opt/rocm-6.2.1/include/hipblas -L /opt/rocm-6.2.1/lib -l hipblas
 
 .PHONY: para
 para: para.cpp matrix.cpp matrix.hpp
